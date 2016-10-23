@@ -7,6 +7,11 @@ int tiltAngle;
  * MPU defs
  * 
  */
+#define kXGyroOffset 0
+#define kYGyroOffset 0
+#define kZGyroOffset 0
+#define kZAccelOffset 0
+
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
@@ -15,9 +20,9 @@ int tiltAngle;
 
 MPU6050 mpu;
 
-#define OUTPUT_READABLE_QUATERNION
+//#define OUTPUT_READABLE_QUATERNION
 //#define OUTPUT_READABLE_EULER
-//#define OUTPUT_READABLE_YAWPITCHROLL
+#define OUTPUT_READABLE_YAWPITCHROLL
 
 #define LED_PIN 13 // (Arduino is 13, Teensy is 11, Teensy++ is 6)
 bool blinkState = false;
@@ -50,247 +55,11 @@ void dmpDataReady() {
 
 
 
-
 /*
  * 
- * Motor Drive def's
+ * MPU FUNCTIONS
  * 
  */
-#define kForward 1
-#define kReverse -1
-#define kStop 0
-
-#define kLeftSideSpeed 5
-#define kLeftSideForward 6
-#define kLeftSideReverse 7
-#define kRightSideSpeed 11
-#define kRightSideForward 10
-#define kRightSideReverse 9
-
-
-
-void setup() {
-  Serial.begin(115200);
-  
-  pinMode(kLeftSideSpeed, OUTPUT);
-  pinMode(kLeftSideForward, OUTPUT);
-  pinMode(kLeftSideReverse, OUTPUT);
-  pinMode(kRightSideSpeed, OUTPUT);
-  pinMode(kRightSideForward, OUTPUT);
-  pinMode(kRightSideReverse, OUTPUT);
-
-  mpuSetup();
-}
-
-
-void loop() {
-  mpuLoop();
-  directionWithAngle(tiltAngle);
-  
-  Serial.print("tilt: ");
-  Serial.print(tiltAngle);
-  Serial.println(" ");
-//  forward();
-//  delay(1000);
-//  stop();
-//  delay(1000);
-}
-
-
-//void trigger() {
-//  digitalWrite(kTriggerPin, LOW);
-//  delayMicroseconds(5);
-//  digitalWrite(kTriggerPin, HIGH);
-//  delayMicroseconds(10);
-//  digitalWrite(kTriggerPin, LOW);
-//}
-//
-//long distanceInMillimeters() {
-//  long duration, cm, mm, inches;
-//
-//  pinMode(kEchoPin, INPUT);
-//  duration = pulseIn(kEchoPin, HIGH);
-//  
-//  mm = (duration/2) / 2.91;
-//  cm = (duration/2) / 29.1;
-//  inches = (duration/2) / 74;
-//  Serial.print(duration);
-//  Serial.print(" - duration;");
-////  Serial.print(inches);
-////  Serial.print("in, ");
-//  Serial.print(mm);
-//  Serial.print("mm, ");
-////  Serial.print(cm);
-////  Serial.print("cm");
-//  Serial.println();
-//
-//  return mm;  
-//}
-
-
-
-
-
-
-/*
- * 
- * HIGH LEVEL FUNCTIONS
- * 
- */
-void stop() {
-  leftSideDrive(kStop);
-  rightSideDrive(kStop);
-}
-
-
-void forward() {
-  leftSideDrive(kForward);
-  rightSideDrive(kForward);
-}
-
-
-void reverse() {
-  leftSideDrive(kReverse);
-  rightSideDrive(kReverse);
-}
-
-
-void left() {
-  leftSideDrive(kStop);
-  rightSideDrive(kForward);
-}
-
-
-void right() {
-  leftSideDrive(kForward);
-  rightSideDrive(kStop);
-}
-
-
-void directionWithAngle(int angle) {
-  int motorActivationMinSpeed = 100;
-  int activationMinAngle = 10;
-  
-  int constrainedAngle = constrain(angle, -90, 90);
-  
-  int speed = map(abs(constrainedAngle), 0, 90, motorActivationMinSpeed, 255);
-  
-  int direction = (angle > 0)? kForward: kReverse;
-  
-  genericDrive( kLeftSideSpeed, kLeftSideForward, kLeftSideReverse, direction, speed);
-  genericDrive( kRightSideSpeed, kRightSideForward, kRightSideReverse, direction, speed);
-}
-
-/*
- * 
- * Drive Side Controls
- * 
- * 
- * /
- */
-void leftSideDrive(int direction) {
-  genericDrive( kLeftSideSpeed, kLeftSideForward, kLeftSideReverse, direction, 255);
-}
-
-
-void rightSideDrive(int direction) {
-  genericDrive( kRightSideSpeed, kRightSideForward, kRightSideReverse, direction, 255);
-}
-
-
-void genericDrive(int pinPWM, int pinForward, int pinReverse, int direction, int PWM) {
-//  Serial.println(" ");
-//  Serial.println("#######");
-//  Serial.println(" ");
-//  Serial.print("PWM: ");
-//  Serial.println(pinPWM);
-//  Serial.print("FORWARD: ");
-//  Serial.println(pinForward);
-//  Serial.print("REVERSE: ");
-//  Serial.println(pinReverse);
-//  Serial.print("DIRECTION: ");
-//  Serial.println(direction);
-  
-  if (direction == kForward) 
-  {
-//    Serial.println("kForward");
-    digitalWrite(pinForward, HIGH);
-    digitalWrite(pinReverse, LOW);
-    analogWrite(pinPWM, PWM);
-  }
-  else if (direction == kReverse) 
-  {
-//    Serial.println("kReverse");
-    digitalWrite(pinForward, LOW);
-    digitalWrite(pinReverse, HIGH);
-    analogWrite(pinPWM, PWM);
-  }
-  else 
-  {
-//    Serial.println("kStop");
-    digitalWrite(pinForward, LOW);
-    digitalWrite(pinReverse, LOW);
-    analogWrite(pinPWM, 0);
-  }  
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// ================================================================
-// ===                      MPU SETUP                           ===
-// ================================================================
 
 void mpuSetup() {
     // join I2C bus (I2Cdev library doesn't do this automatically)
@@ -310,26 +79,16 @@ void mpuSetup() {
     // verify connection
     Serial.println(F("Testing device connections..."));
     Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
-//
-//    // wait for ready
-//    Serial.println(F("\nSend any character to begin DMP programming and demo: "));
-//    while (Serial.available() && Serial.read()); // empty buffer
-//    while (!Serial.available());                 // wait for data
-//    while (Serial.available() && Serial.read()); // empty buffer again
-
-    while (Serial.available() && Serial.read()); // empty buffer
-    delay(500);
-    while (Serial.available() && Serial.read()); // empty buffer again
 
     // load and configure the DMP
     Serial.println(F("Initializing DMP..."));
     devStatus = mpu.dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
-    mpu.setXGyroOffset(220);
-    mpu.setYGyroOffset(76);
-    mpu.setZGyroOffset(-85);
-    mpu.setZAccelOffset(1788); // 1688 factory default for my test chip
+    mpu.setXGyroOffset(kXGyroOffset);
+    mpu.setYGyroOffset(kYGyroOffset);
+    mpu.setZGyroOffset(kZGyroOffset);
+    mpu.setZAccelOffset(kZAccelOffset); // 1688 factory default for my test chip
 
     // make sure it worked (returns 0 if so)
     if (devStatus == 0) {
@@ -358,15 +117,9 @@ void mpuSetup() {
         Serial.println(F(")"));
     }
 
-    // configure LED for output
-    pinMode(LED_PIN, OUTPUT);
 }
 
 
-
-// ================================================================
-// ===                    MAIN PROGRAM LOOP                     ===
-// ================================================================
 
 void mpuLoop() {
     // if programming failed, don't try to do anything
@@ -416,14 +169,14 @@ void mpuLoop() {
             mpu.dmpGetQuaternion(&q, fifoBuffer);
             int newTiltAngle = (int) ((q.x * 100) *2) - 90;
             tiltAngle = newTiltAngle - 20; // board offset
-//            Serial.print("quat\t");
-//            Serial.print(q.w);
-//            Serial.print("\t");
-//            Serial.print(q.x);
-//            Serial.print("\t");
-//            Serial.print(q.y);
-//            Serial.print("\t");
-//            Serial.println(q.z);
+            Serial.print("quat\t");
+            Serial.print(q.w);
+            Serial.print("\t");
+            Serial.print(q.x);
+            Serial.print("\t");
+            Serial.print(q.y);
+            Serial.print("\t");
+            Serial.println(q.z);
         #endif
 
         #ifdef OUTPUT_READABLE_EULER
@@ -481,22 +234,112 @@ void mpuLoop() {
             Serial.println(aaWorld.z);
         #endif
     
-        #ifdef OUTPUT_TEAPOT
-            // display quaternion values in InvenSense Teapot demo format:
-            teapotPacket[2] = fifoBuffer[0];
-            teapotPacket[3] = fifoBuffer[1];
-            teapotPacket[4] = fifoBuffer[4];
-            teapotPacket[5] = fifoBuffer[5];
-            teapotPacket[6] = fifoBuffer[8];
-            teapotPacket[7] = fifoBuffer[9];
-            teapotPacket[8] = fifoBuffer[12];
-            teapotPacket[9] = fifoBuffer[13];
-            Serial.write(teapotPacket, 14);
-            teapotPacket[11]++; // packetCount, loops at 0xFF on purpose
-        #endif
+        
 
         // blink LED to indicate activity
         blinkState = !blinkState;
         digitalWrite(LED_PIN, blinkState);
     }
 }
+
+
+
+
+
+
+
+
+
+
+/*
+ * 
+ * Motor Drive def's
+ * 
+ */
+#define kForward 1
+#define kReverse -1
+#define kStop 0
+
+#define kLeftSideSpeed 5
+#define kLeftSideForward 6
+#define kLeftSideReverse 7
+#define kRightSideSpeed 11
+#define kRightSideForward 10
+#define kRightSideReverse 9
+
+
+/*
+ * 
+ * MOTOR DRIVE FUNCTIONS
+ * 
+ */
+void motorDriveSetup() {
+  pinMode(kLeftSideSpeed, OUTPUT);
+  pinMode(kLeftSideForward, OUTPUT);
+  pinMode(kLeftSideReverse, OUTPUT);
+  pinMode(kRightSideSpeed, OUTPUT);
+  pinMode(kRightSideForward, OUTPUT);
+  pinMode(kRightSideReverse, OUTPUT);
+}
+
+
+
+void directionWithAngle(int angle) {
+  int motorActivationMinSpeed = 100;
+  int activationMinAngle = 10;
+  
+  int constrainedAngle = constrain(angle, -90, 90);
+  
+  int speed = map(abs(constrainedAngle), 0, 90, motorActivationMinSpeed, 255);
+  
+  int direction = (angle > 0)? kForward: kReverse;
+  
+  genericDrive( kLeftSideSpeed, kLeftSideForward, kLeftSideReverse, direction, speed);
+  genericDrive( kRightSideSpeed, kRightSideForward, kRightSideReverse, direction, speed);
+}
+
+
+
+void genericDrive(int pinPWM, int pinForward, int pinReverse, int direction, int PWM) {
+  
+  if (direction == kForward) 
+  {
+    digitalWrite(pinForward, HIGH);
+    digitalWrite(pinReverse, LOW);
+    analogWrite(pinPWM, PWM);
+  }
+  else if (direction == kReverse) 
+  {
+    digitalWrite(pinForward, LOW);
+    digitalWrite(pinReverse, HIGH);
+    analogWrite(pinPWM, PWM);
+  }
+  else 
+  {
+    digitalWrite(pinForward, LOW);
+    digitalWrite(pinReverse, LOW);
+    analogWrite(pinPWM, 0);
+  }  
+}
+
+
+
+
+
+
+
+void setup() {
+  // basic setup
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+
+  motorDriveSetup();
+  mpuSetup();
+}
+
+
+void loop() {
+  mpuLoop();
+  directionWithAngle(tiltAngle);
+}
+
