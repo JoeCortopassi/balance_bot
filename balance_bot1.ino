@@ -1,4 +1,14 @@
-int tiltAngle;
+//#define Sprint(a) (Serial.print(a))
+//#define Sprintln(a) (Serial.println(a))
+#define Sprint(a) 
+#define Sprintln(a) 
+
+
+#define kMotorActivationMinSpeed 60
+#define kXGyroOffset 0
+#define kYGyroOffset 0
+#define kZGyroOffset 0
+#define kZAccelOffset 0
 
 
 
@@ -7,10 +17,6 @@ int tiltAngle;
  * MPU defs
  * 
  */
-#define kXGyroOffset 0
-#define kYGyroOffset 0
-#define kZGyroOffset 0
-#define kZAccelOffset 0
 
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
@@ -73,15 +79,15 @@ void mpuSetup() {
     while (!Serial); // wait for Leonardo enumeration, others continue immediately
 
     // initialize device
-    Serial.println(F("Initializing I2C devices..."));
+    Sprintln(F("Initializing I2C devices..."));
     mpu.initialize();
 
     // verify connection
-    Serial.println(F("Testing device connections..."));
-    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+    Sprintln(F("Testing device connections..."));
+    Sprintln(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
 
     // load and configure the DMP
-    Serial.println(F("Initializing DMP..."));
+    Sprintln(F("Initializing DMP..."));
     devStatus = mpu.dmpInitialize();
 
     // supply your own gyro offsets here, scaled for min sensitivity
@@ -93,16 +99,16 @@ void mpuSetup() {
     // make sure it worked (returns 0 if so)
     if (devStatus == 0) {
         // turn on the DMP, now that it's ready
-        Serial.println(F("Enabling DMP..."));
+        Sprintln(F("Enabling DMP..."));
         mpu.setDMPEnabled(true);
 
         // enable Arduino interrupt detection
-        Serial.println(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
+        Sprintln(F("Enabling interrupt detection (Arduino external interrupt 0)..."));
         attachInterrupt(0, dmpDataReady, RISING);
         mpuIntStatus = mpu.getIntStatus();
 
         // set our DMP Ready flag so the main loop() function knows it's okay to use it
-        Serial.println(F("DMP ready! Waiting for first interrupt..."));
+        Sprintln(F("DMP ready! Waiting for first interrupt..."));
         dmpReady = true;
 
         // get expected DMP packet size for later comparison
@@ -112,37 +118,25 @@ void mpuSetup() {
         // 1 = initial memory load failed
         // 2 = DMP configuration updates failed
         // (if it's going to break, usually the code will be 1)
-        Serial.print(F("DMP Initialization failed (code "));
-        Serial.print(devStatus);
-        Serial.println(F(")"));
+        Sprint(F("DMP Initialization failed (code "));
+        Sprint(devStatus);
+        Sprintln(F(")"));
     }
 
 }
 
 
 
-void mpuLoop() {
+void updateYawPitchRoll( double *yaw, double *pitch, double *roll )  {
     // if programming failed, don't try to do anything
     if (!dmpReady) return;
 
-    // wait for MPU interrupt or extra packet(s) available
-    while (!mpuInterrupt && fifoCount < packetSize) {
-        // other program behavior stuff here
-        // .
-        // .
-        // .
-        // if you are really paranoid you can frequently test in between other
-        // stuff to see if mpuInterrupt is true, and if so, "break;" from the
-        // while() loop to immediately process the MPU data
-        // .
-        // .
-        // .
-    }
+    while (!mpuInterrupt && fifoCount < packetSize) { }
 
     // reset interrupt flag and get INT_STATUS byte
     mpuInterrupt = false;
     mpuIntStatus = mpu.getIntStatus();
-
+    
     // get current FIFO count
     fifoCount = mpu.getFIFOCount();
 
@@ -150,10 +144,14 @@ void mpuLoop() {
     if ((mpuIntStatus & 0x10) || fifoCount == 1024) {
         // reset so we can continue cleanly
         mpu.resetFIFO();
-        Serial.println(F("FIFO overflow!"));
-
+        Sprintln(F("FIFO overflow!"));
+        
     // otherwise, check for DMP data ready interrupt (this should happen frequently)
     } else if (mpuIntStatus & 0x02) {
+        // blink LED to indicate activity
+        blinkState = !blinkState;
+        digitalWrite(LED_PIN, blinkState);
+        
         // wait for correct available data length, should be a VERY short wait
         while (fifoCount < packetSize) fifoCount = mpu.getFIFOCount();
 
@@ -164,81 +162,13 @@ void mpuLoop() {
         // (this lets us immediately read more without waiting for an interrupt)
         fifoCount -= packetSize;
 
-        #ifdef OUTPUT_READABLE_QUATERNION
-            // display quaternion values in easy matrix form: w x y z
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            int newTiltAngle = (int) ((q.x * 100) *2) - 90;
-            tiltAngle = newTiltAngle - 20; // board offset
-            Serial.print("quat\t");
-            Serial.print(q.w);
-            Serial.print("\t");
-            Serial.print(q.x);
-            Serial.print("\t");
-            Serial.print(q.y);
-            Serial.print("\t");
-            Serial.println(q.z);
-        #endif
-
-        #ifdef OUTPUT_READABLE_EULER
-            // display Euler angles in degrees
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetEuler(euler, &q);
-            Serial.print("euler\t");
-            Serial.print(euler[0] * 180/M_PI);
-            Serial.print("\t");
-            Serial.print(euler[1] * 180/M_PI);
-            Serial.print("\t");
-            Serial.println(euler[2] * 180/M_PI);
-        #endif
-
-        #ifdef OUTPUT_READABLE_YAWPITCHROLL
-            // display Euler angles in degrees
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-            Serial.print("ypr\t");
-            Serial.print(ypr[0] * 180/M_PI);
-            Serial.print("\t");
-            Serial.print(ypr[1] * 180/M_PI);
-            Serial.print("\t");
-            Serial.println(ypr[2] * 180/M_PI);
-        #endif
-
-        #ifdef OUTPUT_READABLE_REALACCEL
-            // display real acceleration, adjusted to remove gravity
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetAccel(&aa, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-            Serial.print("areal\t");
-            Serial.print(aaReal.x);
-            Serial.print("\t");
-            Serial.print(aaReal.y);
-            Serial.print("\t");
-            Serial.println(aaReal.z);
-        #endif
-
-        #ifdef OUTPUT_READABLE_WORLDACCEL
-            // display initial world-frame acceleration, adjusted to remove gravity
-            // and rotated based on known orientation from quaternion
-            mpu.dmpGetQuaternion(&q, fifoBuffer);
-            mpu.dmpGetAccel(&aa, fifoBuffer);
-            mpu.dmpGetGravity(&gravity, &q);
-            mpu.dmpGetLinearAccel(&aaReal, &aa, &gravity);
-            mpu.dmpGetLinearAccelInWorld(&aaWorld, &aaReal, &q);
-            Serial.print("aworld\t");
-            Serial.print(aaWorld.x);
-            Serial.print("\t");
-            Serial.print(aaWorld.y);
-            Serial.print("\t");
-            Serial.println(aaWorld.z);
-        #endif
-    
-        
-
-        // blink LED to indicate activity
-        blinkState = !blinkState;
-        digitalWrite(LED_PIN, blinkState);
+        // display Euler angles in degrees
+        mpu.dmpGetQuaternion(&q, fifoBuffer);
+        mpu.dmpGetGravity(&gravity, &q);
+        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+        *yaw = (ypr[0] * 180/M_PI);
+        *pitch = (ypr[1] * 180/M_PI);
+        *roll = (ypr[2] * 180/M_PI);
     }
 }
 
@@ -285,13 +215,9 @@ void motorDriveSetup() {
 
 
 void directionWithAngle(int angle) {
-  int motorActivationMinSpeed = 100;
-  int activationMinAngle = 10;
-  
   int constrainedAngle = constrain(angle, -90, 90);
   
-  int speed = map(abs(constrainedAngle), 0, 90, motorActivationMinSpeed, 255);
-  
+  int speed = map(abs(constrainedAngle), 0, 90, kMotorActivationMinSpeed, 255);
   int direction = (angle > 0)? kForward: kReverse;
   
   genericDrive( kLeftSideSpeed, kLeftSideForward, kLeftSideReverse, direction, speed);
@@ -339,7 +265,27 @@ void setup() {
 
 
 void loop() {
-  mpuLoop();
+  double yaw, pitch, roll;
+  updateYawPitchRoll( &yaw, &pitch, &roll );
+  
+  double tiltAngle = tiltAngleFromYawPitchRoll( yaw, pitch, roll );
   directionWithAngle(tiltAngle);
+}
+
+
+
+int tiltAngleFromYawPitchRoll( double yaw, double pitch, double roll ) {
+//  Serial.print("You wot mate?   ");
+//  Serial.print(atan2(pitch, roll)* 57296 / 1000);
+//  Serial.print(" ");
+//  Serial.print(atan2(pitch, yaw)* 57296 / 1000);
+//  Serial.print(" ");
+//  Serial.print(atan2(roll, yaw)* 57296 / 1000);
+//  Serial.println(" ");
+  double rad = atan2(pitch, yaw);
+  double deg = rad * 57296 / 1000;
+  Sprint("Degrees??? ");
+  Sprintln(deg);
+  return deg; // is this all there is to it?
 }
 
