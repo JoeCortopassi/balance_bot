@@ -1,15 +1,18 @@
-//#define Sprint(a) (Serial.print(a))
-//#define Sprintln(a) (Serial.println(a))
-#define Sprint(a) 
-#define Sprintln(a) 
+#define Sprint(a) (Serial.print(a))
+#define Sprintln(a) (Serial.println(a))
+//#define Sprint(a) 
+//#define Sprintln(a) 
 
-
-#define kMotorActivationMinSpeed 60
-#define kXGyroOffset 0
-#define kYGyroOffset 0
-#define kZGyroOffset 0
-#define kZAccelOffset 0
-
+double yaw, pitch, roll;
+#define kMotorActivationMinSpeed 80 // 120 gets very oscillaty, 80 seemed ok
+#define kConstrainedAngle 30 // what good is max speed if it only happens after we fall over
+#define kWheelDifference 10
+// 90 works, but tilts forward, 60 gets it falling backwards
+#define kBalanceOffset 62 
+#define kXGyroOffset 220
+#define kYGyroOffset 76
+#define kZGyroOffset -85
+#define kZAccelOffset 1788
 
 
 /*
@@ -127,11 +130,16 @@ void mpuSetup() {
 
 
 
-void updateYawPitchRoll( double *yaw, double *pitch, double *roll )  {
+void updateYawPitchRoll()  {
     // if programming failed, don't try to do anything
     if (!dmpReady) return;
 
-    while (!mpuInterrupt && fifoCount < packetSize) { }
+    while (!mpuInterrupt && fifoCount < packetSize) {
+      double tiltAngle = tiltAngleFromYawPitchRoll( yaw, pitch, roll );
+      directionWithAngle(tiltAngle);  
+      
+      Serial.println(tiltAngle);
+    }
 
     // reset interrupt flag and get INT_STATUS byte
     mpuInterrupt = false;
@@ -162,13 +170,19 @@ void updateYawPitchRoll( double *yaw, double *pitch, double *roll )  {
         // (this lets us immediately read more without waiting for an interrupt)
         fifoCount -= packetSize;
 
-        // display Euler angles in degrees
+
         mpu.dmpGetQuaternion(&q, fifoBuffer);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-        *yaw = (ypr[0] * 180/M_PI);
-        *pitch = (ypr[1] * 180/M_PI);
-        *roll = (ypr[2] * 180/M_PI);
+        mpu.dmpGetEuler(euler, &q);
+        yaw = euler[0] * 180/M_PI;
+        pitch = euler[1] * 180/M_PI;
+        roll = euler[2] * 180/M_PI;
+//        // YPR: display Euler angles in degrees
+//        mpu.dmpGetQuaternion(&q, fifoBuffer);
+//        mpu.dmpGetGravity(&gravity, &q);
+//        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+//        yaw = (ypr[0] * 180/M_PI);
+//        pitch = (ypr[1] * 180/M_PI);
+//        roll = (ypr[2] * 180/M_PI);
     }
 }
 
@@ -215,13 +229,14 @@ void motorDriveSetup() {
 
 
 void directionWithAngle(int angle) {
-  int constrainedAngle = constrain(angle, -90, 90);
+  int constrainedAngle = constrain(angle, (-1 * kConstrainedAngle), kConstrainedAngle);
   
-  int speed = map(abs(constrainedAngle), 0, 90, kMotorActivationMinSpeed, 255);
+  int leftSpeed = map(abs(constrainedAngle), 0, kConstrainedAngle, (kMotorActivationMinSpeed + kWheelDifference), 255);
+  int rightSpeed = map(abs(constrainedAngle), 0, kConstrainedAngle, kMotorActivationMinSpeed, 255);
   int direction = (angle > 0)? kForward: kReverse;
   
-  genericDrive( kLeftSideSpeed, kLeftSideForward, kLeftSideReverse, direction, speed);
-  genericDrive( kRightSideSpeed, kRightSideForward, kRightSideReverse, direction, speed);
+  genericDrive( kLeftSideSpeed, kLeftSideForward, kLeftSideReverse, direction, leftSpeed);
+  genericDrive( kRightSideSpeed, kRightSideForward, kRightSideReverse, direction, rightSpeed);
 }
 
 
@@ -265,27 +280,14 @@ void setup() {
 
 
 void loop() {
-  double yaw, pitch, roll;
-  updateYawPitchRoll( &yaw, &pitch, &roll );
-  
-  double tiltAngle = tiltAngleFromYawPitchRoll( yaw, pitch, roll );
-  directionWithAngle(tiltAngle);
+  updateYawPitchRoll();
 }
 
 
 
 int tiltAngleFromYawPitchRoll( double yaw, double pitch, double roll ) {
-//  Serial.print("You wot mate?   ");
-//  Serial.print(atan2(pitch, roll)* 57296 / 1000);
-//  Serial.print(" ");
-//  Serial.print(atan2(pitch, yaw)* 57296 / 1000);
-//  Serial.print(" ");
-//  Serial.print(atan2(roll, yaw)* 57296 / 1000);
-//  Serial.println(" ");
-  double rad = atan2(pitch, yaw);
-  double deg = rad * 57296 / 1000;
-  Sprint("Degrees??? ");
-  Sprintln(deg);
-  return deg; // is this all there is to it?
+  int tilt = -1 * (roll + kBalanceOffset);
+  
+  return tilt;
 }
 
